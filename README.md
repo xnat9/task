@@ -1,39 +1,81 @@
-# task
-
 #### 介绍
-{**以下是 Gitee 平台说明，您可以替换此简介**
-Gitee 是 OSCHINA 推出的基于 Git 的代码托管平台（同时支持 SVN）。专为开发者提供稳定、高效、安全的云端软件开发协作平台
-无论是个人、团队、或是企业，都能够用 Gitee 实现代码托管、项目管理、协作开发。企业项目请看 [https://gitee.com/enterprises](https://gitee.com/enterprises)}
+轻量级任务管理
 
-#### 软件架构
-软件架构说明
+TaskWrapper任务: 一组顺序相关性的步骤组成
 
+TaskContext(执行的上下文/管理者/执行容器): 一组逻辑相关性的任务
+ * 并行任务
+ * 衍生任务
+ * 任务调度
 
-#### 安装教程
+#### 创建独立任务
+```
+TaskWrapper task = new TaskWrapper()
+    // 添加执行步骤1
+    .step((param, me) -> {
+        me.info("执行 step1 ... ");
+        return "xxx";
+    }); // 可继续添加n个执行步骤
+task.start(); // 开始执行
+```
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+#### 重复执行步骤任务
+```
+TaskWrapper task = new TaskWrapper()
+    // 添加执行步骤1
+    .reStep(3, (param, me) -> {
+        me.info("执行 重试 step3, 第 {} 次", me.times());
+        return null;
+    }, (param, me) -> { // 返回 true 则重复继续执行当前步骤
+        if (param == null && me.times() < 3) return true;
+        else return false;
+    });
+task.start(); // 开始执行
+```
 
-#### 使用说明
+#### 任务暂停/恢复
+```
+TaskWrapper task = new TaskWrapper()
+    // 添加执行步骤1
+    .step((param, me) -> {
+        me.info("执行 step1 ... ");
+        me.task().suspend(); // 暂停下一个步骤执行
+        return "xxx";
+    })
+    // 添加执行步骤2
+    .step((param, me) -> {
+        me.debug("执行 step2 ... . 参数: " + param); // param 为xxx
+        return null;
+    });;
+task.start(); // 开始执行
+Thread.sleep(1000L * 5);
+task.resume(); // 恢复执行
+```
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+#### 一组相关任务
+```
+TaskContext ctx = new TaskContext(); //创建任务容器
+// 添加任务1
+ctx.addTask(new TaskWrapper().step((param, me) -> {
+    me.info("执行任务1");
+    return null;
+}));
+// 添加任务2
+ctx.addTask(new TaskWrapper().step((param, me) -> {
+    me.info("执行任务2");
+    return null;
+}));
+// 添加任务3: 在任务中衍生任务
+ctx.addTask(new TaskWrapper().step((param, me) -> {
+    me.info("执行任务2");
+    ctx.addTask(new TaskWrapper().step((param, me) -> {
+        me.info("执行衍生任务");
+        return null;
+    }));
+    return null;
+}));
+ctx.start();
+```
 
 #### 参与贡献
-
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
-
-
-#### 特技
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+xnatural@msn.cn

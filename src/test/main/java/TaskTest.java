@@ -1,32 +1,66 @@
+import cn.xnatural.task.TaskContext;
 import cn.xnatural.task.TaskWrapper;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.Test;
 
 public class TaskTest {
 
     public static void main(String[] args) throws Exception {
-        ExecutorService exec = Executors.newFixedThreadPool(2, new ThreadFactory() {
-            AtomicInteger i = new AtomicInteger(1);
-            @Override
-            public Thread newThread(Runnable r) {
-                return new Thread(r, "aio-" + i.getAndIncrement());
-            }
-        });
-        Map<String, Object> attrs = new HashMap<>();
-        attrs.put("delimiter", "\n");
-        new TaskWrapper().step((i, task) -> {
-            task.log().info("执行xxx");
+        TaskContext<TaskWrapper> tCtx = new TaskContext<>();
+        tCtx.addTask(new TaskWrapper().step((i, me) -> {
+            me.log().info("执行xxx");
             return "xxx";
-        }).step((i, task) -> {
-            task.log().info("执行第2步. 参数为: " + i);
+        }).step((i, me) -> {
+            me.log().info("执行第2步. 参数为: " + i);
             return "ooo";
-        }).start();
-
-        // exec.shutdown();
+        }).step((i, me) -> {
+            TaskWrapper t = new TaskWrapper().step((ii, tt) -> {
+                tt.log().info("执行步骤...............");
+                return null;
+            });
+            me.log().info("生成新的任务: " + t.getKey());
+            tCtx.addTask(t);
+            return t;
+        }));
+        tCtx.start();
     }
+
+
+    @Test
+    void taskTest() throws Exception {
+        TaskWrapper task = new TaskWrapper()
+                .step((param, me) -> {
+                    me.info("执行 step1 ... ");
+                    me.task().suspend();
+                    return "xxx";
+                })
+                .step((param, me) -> {
+                    me.debug("执行 step2 ... . 参数: " + param);
+                    return null;
+                })
+                .reStep(3, (param, me) -> {
+                    me.info("执行 重试 step3, 第 {} 次", me.times());
+                    return null;
+                }, (param, me) -> {
+                    if (param == null && me.times() < 3) return true;
+                    else return false;
+                });
+        task.start();
+        Thread.sleep(1000L * 5);
+        task.resume(); // 恢复执行
+    }
+
+
+    @Test
+    void testContext() throws Exception {
+        TaskContext ctx = new TaskContext();
+        ctx.addTask(new TaskWrapper().step((param, me) -> {
+            me.info("");
+            return null;
+        }));
+        ctx.start();
+        Thread.sleep(1000L * 5);
+        ctx.resume(); // 恢复执行
+    }
+
+
 }

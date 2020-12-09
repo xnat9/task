@@ -4,12 +4,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>cn.xnatural.aio</groupId>
-    <artifactId>aio</artifactId>
+    <groupId>cn.xnatural.task</groupId>
+    <artifactId>task</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.3</version>
+    <version>1.0.0</version>
 
-    <url>https://gitee.com/xnat/aio</url>
+    <url>https://gitee.com/xnat/task</url>
 
     <dependencies>
         <dependency>
@@ -18,7 +18,12 @@
             <version>1.7.25</version>
         </dependency>
 
-
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>5.7.0</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
@@ -28,8 +33,8 @@
     </dependencies>
 
 
-    <name>aio</name>
-    <description>基于 jdk aio 的工具 AioClient, AioServer, AioStream</description>
+    <name>task</name>
+    <description>轻量级任务</description>
 
     <licenses>
         <license>
@@ -40,9 +45,9 @@
     </licenses>
 
     <scm>
-        <url>https://gitee.com/xnat/aio</url>
-        <connection>https://gitee.com/xnat/aio.git</connection>
-        <developerConnection>https://gitee.com/xnat/aio</developerConnection>
+        <url>https://gitee.com/xnat/task</url>
+        <connection>https://gitee.com/xnat/task.git</connection>
+        <developerConnection>https://gitee.com/xnat/task</developerConnection>
     </scm>
 
     <developers>
