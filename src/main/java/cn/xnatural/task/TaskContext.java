@@ -4,17 +4,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Date;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
 
 /**
- * 任务{@link T}执行的上下文/管理者/执行容器: 一组逻辑相关性的{@link TaskWrapper}
+ * 执行上下文/任务调度/执行容器: 一组逻辑相关性的{@link TaskWrapper}
  * 1. 并行任务
  * 2. 衍生任务
  * 3. 任务调度
@@ -23,50 +22,57 @@ import java.util.concurrent.atomic.LongAdder;
  * @param <T> Task 类型
  */
 public class TaskContext<T extends TaskWrapper> {
-    protected static final Logger   log            = LoggerFactory.getLogger(TaskContext.class);
+    protected static final Logger            log            = LoggerFactory.getLogger(TaskContext.class);
     /**
      * 所有任务通过 executor 执行
      */
-    protected              ExecutorService executor;
+    protected              ExecutorService   executor;
     /**
      * Context 唯一标识
      */
-    protected String   key;
+    protected String                         key;
     /**
      * 等待执行的任务对列
      */
-    protected final        Queue<T> waitingTasks   = new ConcurrentLinkedQueue<>();
+    protected final        Queue<T>          waitingTasks   = new ConcurrentLinkedQueue<>();
     /**
      * 正在执行的任务对列
      */
-    protected final        Queue<T> executingTasks = new ConcurrentLinkedQueue<>();
+    protected final        Queue<T>          executingTasks = new ConcurrentLinkedQueue<>();
     /**
      * 容器能运行的Task最大个数限制, 即: 并行Task的个数限制
      * {@link #executingTasks}
      */
-    protected int                           parallelLimit  = 10;
+    protected int                            parallelLimit  = 10;
     /**
      * 失败了多少个task
      */
-    protected final LongAdder                           failureCnt = new LongAdder();
+    protected final LongAdder                failureCnt     = new LongAdder();
     /**
      * 成功了多少个task
      */
-    protected final LongAdder                           successCnt = new LongAdder();
+    protected final LongAdder                successCnt     = new LongAdder();
     /**
      * 开始时间
      */
-    protected      Date                                startTime;
+    protected      Date                      startTime;
     /**
      * 当前状态
      */
-    protected final  AtomicReference<Status> status     = new AtomicReference<>();
+    protected final  AtomicReference<Status> status         = new AtomicReference<>();
+    /**
+     * 属性集
+     */
+    protected final Map<String, Object>      attrs;
 
 
-    public TaskContext(String key, ExecutorService executor) {
-        if (key == null || !key.isEmpty()) throw new IllegalArgumentException("key is must not empty");
+    public TaskContext(String key, Map<String, Object> attrs, ExecutorService executor) {
+        if (key == null || key.isEmpty()) throw new IllegalArgumentException("key must not empty");
+        if (attrs == null) throw new NullPointerException("attrs must not null");
+        if (executor == null) throw new NullPointerException("executor must not null");
         this.key = key;
         this.executor = executor;
+        this.attrs = attrs;
     }
     public TaskContext() {
         this.key = "TaskContext[" + Integer.toHexString(hashCode()) + "]";
@@ -77,6 +83,7 @@ public class TaskContext<T extends TaskWrapper> {
                 return new Thread(r, key + "-" + i.getAndIncrement());
             }
         });
+        this.attrs = new ConcurrentHashMap<>();
     }
 
 
@@ -146,8 +153,7 @@ public class TaskContext<T extends TaskWrapper> {
         if (status.get() == Status.Stopping) { //容器被通知停止, 让正在执行的任务对列执行完成
             for (T t : executingTasks) { t.resume(); }
         }
-        if (waitingTasks.isEmpty() && executingTasks.isEmpty() && status.get() != Status.Paused) { //等待对列和正在执行对列都为空
-            status.set(Status.OkStopped);
+        if (waitingTasks.isEmpty() && executingTasks.isEmpty() && status.get() != Status.Paused && status.compareAndSet(Status.Running, Status.OkStopped)) { //等待对列和正在执行对列都为空
             doStop(this);
         }
     }
@@ -255,6 +261,19 @@ public class TaskContext<T extends TaskWrapper> {
 
 
     /**
+     * 恢复某一个任务
+     * @param key 任务标识key
+     */
+    public void resumeTask(String key) {
+        for (T task : executingTasks) {
+            if (Objects.equals(task.key, key)) {
+                exec(task::resume); break;
+            }
+        }
+    }
+
+
+    /**
      * 向当前容器中的 线程池 中 添加任务
      * @param fn
      */
@@ -289,6 +308,36 @@ public class TaskContext<T extends TaskWrapper> {
      */
     public boolean isEnd() { return Status.OkStopped == status.get() || Status.FailStopped == status.get(); }
 
+
+    /**
+     * 设置属性
+     * @param key 属性key
+     * @param value 属性值
+     * @return
+     */
+    public TaskContext setAttr(String key, Object value) {
+        this.attrs.put(key, value);
+        return this;
+    }
+
+
+    /**
+     * 获取属性
+     * @param key 属性key
+     * @return 属性值
+     */
+    public Object getAttr(String key) { return attrs.get(key); }
+
+
+    /**
+     * 设置并发任务大小. 默认10个
+     * @param parallelLimit
+     * @return
+     */
+    public TaskContext<T> setParallelLimit(int parallelLimit) {
+        this.parallelLimit = parallelLimit;
+        return this;
+    }
 
     @Override
     public String toString() {

@@ -4,27 +4,6 @@ import org.junit.jupiter.api.Test;
 
 public class TaskTest {
 
-    public static void main(String[] args) throws Exception {
-        TaskContext<TaskWrapper> tCtx = new TaskContext<>();
-        tCtx.addTask(new TaskWrapper().step((i, me) -> {
-            me.log().info("执行xxx");
-            return "xxx";
-        }).step((i, me) -> {
-            me.log().info("执行第2步. 参数为: " + i);
-            return "ooo";
-        }).step((i, me) -> {
-            TaskWrapper t = new TaskWrapper().step((ii, tt) -> {
-                tt.log().info("执行步骤...............");
-                return null;
-            });
-            me.log().info("生成新的任务: " + t.getKey());
-            tCtx.addTask(t);
-            return t;
-        }));
-        tCtx.start();
-    }
-
-
     @Test
     void taskTest() throws Exception {
         TaskWrapper task = new TaskWrapper()
@@ -53,14 +32,23 @@ public class TaskTest {
     @Test
     void testContext() throws Exception {
         TaskContext ctx = new TaskContext();
-        ctx.addTask(new TaskWrapper().step((param, me) -> {
-            me.info("");
+        // 任务task1: 等待条件
+        ctx.addTask(new TaskWrapper("task1").step((param, me) -> {
+            me.info("执行 step1, 检查属性 xxx: {}", ctx.getAttr("xxx"));
+            if (ctx.getAttr("xxx") == null) me.task().suspend(); // 属性为空,则暂停
+            return null;
+        }).step((param, me) -> {
+            me.info("执行 step2, 检查属性 xxx: {}", ctx.getAttr("xxx"));
+            return null;
+        }));
+
+        // 任务task2: 设置条件,然后恢复task1
+        ctx.addTask(new TaskWrapper("task2").step((param, me) -> {
+            me.info("执行 step1, 设置属性");
+            ctx.setAttr("xxx", "ooo");
+            ctx.resumeTask("task1"); // 设置属性xxx, 然后恢复task1继续执行
             return null;
         }));
         ctx.start();
-        Thread.sleep(1000L * 5);
-        ctx.resume(); // 恢复执行
     }
-
-
 }

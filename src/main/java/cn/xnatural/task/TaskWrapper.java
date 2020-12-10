@@ -7,7 +7,6 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -19,29 +18,21 @@ import java.util.function.BiFunction;
  * Created by xxb on 18/1/10.
  */
 public class TaskWrapper {
-    protected static final Logger                log         = LoggerFactory.getLogger(TaskWrapper.class);
+    protected static final Logger                  log         = LoggerFactory.getLogger(TaskWrapper.class);
     // 所属TaskContext 执行容器/执行上下文
-    protected              TaskContext           ctx;
+    protected              TaskContext             ctx;
     /**
      * 当前状态 {@link Status}
      */
-    protected final        AtomicReference<Status>       status      = new AtomicReference<>();
-    /**
-     * 是否应该关闭
-     */
-    private final          AtomicBoolean         shouldStop  = new AtomicBoolean(false);
-    /**
-     * 保存当前正在执行的Step
-     */
-    private                AtomicReference<Step> currentStep = new AtomicReference<>();
+    protected final        AtomicReference<Status> status      = new AtomicReference<>();
     /**
      * 任务开始时间
      */
-    private                Date                  startupTime;
+    private                Date                    startTime;
     /**
      * 任务唯一标识
      */
-    protected Object                key;
+    protected Object                               key;
 
     /**
      * Task 超时时间, 单位毫秒
@@ -52,11 +43,9 @@ public class TaskWrapper {
     protected final List<Step>  steps = new LinkedList<>();
 
 
-    public TaskWrapper(Object key) { this.key = key; }
+    public TaskWrapper(Object key) { if (key == null) throw new NullPointerException("key must not be null"); this.key = key; }
 
-    public TaskWrapper() {
-        key = "Task[" + Integer.toHexString(hashCode()) + "]";
-    }
+    public TaskWrapper() { key = "Task[" + Integer.toHexString(hashCode()) + "]"; }
 
 
     /**
@@ -105,18 +94,18 @@ public class TaskWrapper {
      */
     public final void start() {
         if (Status.OkStopped == status.get() || Status.FailStopped == status.get()) {
-            log.warn(key + " -> already closed"); return;
+            log.warn(logPrefix() + "already closed"); return;
         }
         if (Status.Running == status.get()) {
-            log.warn(key + " -> already running"); return;
+            log.warn(logPrefix() + "already running"); return;
         }
         if (Status.Paused == status.get()) {
-            log.warn(key + " -> already paused"); return;
+            log.warn(logPrefix() + "already paused"); return;
         }
         status.compareAndSet(null, Status.Ready);
-        this.startupTime = new Date();
-        log.debug(key + " -> starting");
-        if (steps.isEmpty()) log.warn(getKey() + " -> not found steps");
+        this.startTime = new Date();
+        log.debug(logPrefix() + "starting");
+        if (steps.isEmpty()) log.warn(logPrefix() + "not found steps");
         trigger();
     }
 
@@ -146,7 +135,7 @@ public class TaskWrapper {
         // 全部完成则结束任务
         if (steps.stream().filter(Step::isCompleted).count() == steps.size()) status.set(Status.OkStopped);
         if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) {
-            log.info(key + " -> finished. spend: {}ms. status: {}",  System.currentTimeMillis() - startupTime.getTime(), status.get());
+            log.info(logPrefix() + "finished. spend: {}ms. status: {}",  System.currentTimeMillis() - startTime.getTime(), status.get());
             if (ctx != null) ctx.removeTask(this);
         }
     }
@@ -206,7 +195,7 @@ public class TaskWrapper {
      * 启动时间
      * @return
      */
-    public Date getStartupTime() { return startupTime; }
+    public Date getStartTime() { return startTime; }
 
 
     /**
@@ -216,8 +205,15 @@ public class TaskWrapper {
     public Object getKey() { return key; }
 
 
+    /**
+     * 日志前缀
+     * @return
+     */
+    protected String logPrefix() { return (ctx() == null ? "" : ctx().key + ", ") + getKey() + " -> ";}
+
+
     @Override
     public String toString() {
-        return key + " -> [startTime: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(startupTime) + ", stepTotal: " + steps.size() + ", completed: " + steps.stream().filter(step -> step.isCompleted()).count() + ", status: " + getStatus() + "]";
+        return logPrefix() + "[startTime: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(startTime) + ", stepTotal: " + steps.size() + ", completed: " + steps.stream().filter(step -> step.isCompleted()).count() + ", status: " + getStatus() + "]";
     }
 }

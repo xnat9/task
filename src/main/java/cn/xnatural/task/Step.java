@@ -9,8 +9,8 @@ import java.util.function.BiFunction;
 
 /**
  * 任务执行单元
- * @param <I>
- * @param <R>
+ * @param <I> 入参. 一般为上一个{@link Step}的执行结果{@link #result}
+ * @param <R> 结果. 一般为下一个{@link Step}的入参{@link I}
  */
 public class Step<I, R> implements BiFunction<I, TaskWrapper, R> {
     // 执行单元
@@ -19,6 +19,7 @@ public class Step<I, R> implements BiFunction<I, TaskWrapper, R> {
     private final TaskWrapper            task;
     // 是否正在执行
     private final AtomicBoolean          running = new AtomicBoolean(false);
+    // 执行结果
     private       R                      result;
     // 是否执行结束
     protected     boolean                end;
@@ -85,35 +86,35 @@ public class Step<I, R> implements BiFunction<I, TaskWrapper, R> {
 
 
     protected void doLog(Level level, String msg, Object[] args, Throwable ex) {
-        ((LocationAwareLogger) TaskWrapper.log).log(null, Step.class.getName(), level.toInt(), msg, args, ex);
+        ((LocationAwareLogger) TaskWrapper.log).log(null, Step.class.getName(), level.toInt(), task().logPrefix() + msg, args, ex);
     }
 
 
     public void info(String msg, Object...args) {
-        doLog(Level.INFO, task().getKey() + " -> " + msg, args, null);
+        doLog(Level.INFO, msg, args, null);
     }
 
 
     public void debug(String msg, Object...args) {
         if (TaskWrapper.log.isDebugEnabled()) {
-            doLog(Level.DEBUG, task().getKey() + " -> " + msg, args, null);
+            doLog(Level.DEBUG, msg, args, null);
         }
     }
 
 
     public void trace(String msg, Object...args) {
         if (TaskWrapper.log.isTraceEnabled()) {
-            doLog(Level.TRACE, task().getKey() + " -> " + msg, args, null);
+            doLog(Level.TRACE, msg, args, null);
         }
     }
 
 
     public void warn(String msg, Object...args) {
-        doLog(Level.WARN, task().getKey() + " -> " + msg, args, null);
+        doLog(Level.WARN, msg, args, null);
     }
 
 
     public void error(Throwable ex, String msg, Object...args) {
-        doLog(Level.ERROR, task().getKey() + " -> " + msg, args, ex);
+        doLog(Level.ERROR, msg, args, ex);
     }
 }
