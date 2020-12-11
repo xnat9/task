@@ -243,6 +243,7 @@ public class TaskContext<T extends TaskWrapper> {
         if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) { return false; }
         if (status.get() == Status.Paused) return true;
         boolean f = status.compareAndSet(Status.Running, Status.Paused);
+        log.info(key + " -> suspend");
         trigger();
         return f;
     }
@@ -255,6 +256,7 @@ public class TaskContext<T extends TaskWrapper> {
         if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) { return false; }
         if (status.get() == Status.Running) return true;
         boolean f = status.compareAndSet(Status.Paused, Status.Ready);
+        log.info(key + " -> resume");
         trigger();
         return f;
     }

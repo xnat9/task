@@ -50,5 +50,8 @@ public class TaskTest {
             return null;
         }));
         ctx.start();
+        ctx.suspend();
+        Thread.sleep(1000 * 5);
+        ctx.resume();
     }
 }
