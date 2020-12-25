@@ -66,10 +66,16 @@ public class TaskContext<T extends TaskWrapper> {
     protected final Map<String, Object>      attrs;
 
 
+    /**
+     * 创建集任务管理
+     * @param key 集任务key
+     * @param attrs 属性集
+     * @param executor 执行器
+     */
     public TaskContext(String key, Map<String, Object> attrs, ExecutorService executor) {
-        if (key == null || key.isEmpty()) throw new IllegalArgumentException("key must not empty");
-        if (attrs == null) throw new NullPointerException("attrs must not null");
-        if (executor == null) throw new NullPointerException("executor must not null");
+        if (key == null || key.isEmpty()) throw new IllegalArgumentException("Param key not empty");
+        if (attrs == null) throw new IllegalArgumentException("Param attrs required");
+        if (executor == null) throw new IllegalArgumentException("Param executor required");
         this.key = key;
         this.executor = executor;
         this.attrs = attrs;
@@ -79,9 +85,7 @@ public class TaskContext<T extends TaskWrapper> {
         executor = Executors.newFixedThreadPool(4, new ThreadFactory() {
             AtomicInteger i = new AtomicInteger(1);
             @Override
-            public Thread newThread(Runnable r) {
-                return new Thread(r, key + "-" + i.getAndIncrement());
-            }
+            public Thread newThread(Runnable r) { return new Thread(r, key + "-" + i.getAndIncrement()); }
         });
         this.attrs = new ConcurrentHashMap<>();
     }
@@ -337,9 +341,11 @@ public class TaskContext<T extends TaskWrapper> {
      * @return
      */
     public TaskContext<T> setParallelLimit(int parallelLimit) {
+        if (parallelLimit < 1) throw new IllegalArgumentException("Param parallelLimit >= 1");
         this.parallelLimit = parallelLimit;
         return this;
     }
+
 
     @Override
     public String toString() {

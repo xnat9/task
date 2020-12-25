@@ -7,7 +7,7 @@
     <groupId>cn.xnatural.task</groupId>
     <artifactId>task</artifactId>
     <packaging>jar</packaging>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 
     <url>https://gitee.com/xnat/task</url>
 
@@ -15,7 +15,7 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>1.7.25</version>
+            <version>1.7.30</version>
         </dependency>
 
         <dependency>
@@ -31,7 +31,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
 
     <name>task</name>
     <description>轻量级任务</description>
@@ -66,7 +65,6 @@
             <name>hubert</name>
         </contributor>
     </contributors>
-
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

@@ -15,16 +15,16 @@ import java.util.function.BiFunction;
  *
  * 启动: {@link #start}, 核心方法 {@link #trigger}
  * 任务方法执行顺序: {@link #trigger()}
- * Created by xxb on 18/1/10.
+ * Created by xxb on 18/12/20.
  */
 public class TaskWrapper {
-    protected static final Logger                  log         = LoggerFactory.getLogger(TaskWrapper.class);
+    protected static final Logger                  log    = LoggerFactory.getLogger(TaskWrapper.class);
     // 所属TaskContext 执行容器/执行上下文
     protected              TaskContext             ctx;
     /**
      * 当前状态 {@link Status}
      */
-    protected final        AtomicReference<Status> status      = new AtomicReference<>();
+    protected final        AtomicReference<Status> status = new AtomicReference<>();
     /**
      * 任务开始时间
      */
@@ -33,14 +33,10 @@ public class TaskWrapper {
      * 任务唯一标识
      */
     protected Object                               key;
-
     /**
-     * Task 超时时间, 单位毫秒
-     * 默认10分钟.
-     * TODO 检测超时的Task
+     * 任务的步骤执行链
      */
-    protected              long                  timeout     = 1000 * 60 * 10;
-    protected final List<Step>  steps = new LinkedList<>();
+    protected final List<Step>                     steps  = new LinkedList<>();
 
 
     public TaskWrapper(Object key) { if (key == null) throw new NullPointerException("key must not be null"); this.key = key; }
@@ -59,9 +55,10 @@ public class TaskWrapper {
      * @param fn 执行逻辑函数
      * @param <I> 入参类型. 入参为上一个{@link Step}的返回
      * @param <R> 输出结果类型. 为下一个{@link Step}的入参
-     * @return
+     * @return {@link TaskWrapper}
      */
     public <I, R> TaskWrapper step(BiFunction<I, Step, R> fn) {
+        if (fn == null) throw new IllegalArgumentException("Param fn required");
         steps.add(new Step<>(this, fn));
         return this;
     }
@@ -77,7 +74,7 @@ public class TaskWrapper {
      * @return
      */
     public <I, R> TaskWrapper reStep(int limit, BiFunction<I, Step, R> fn, BiFunction<R, Step, Boolean> isReRun) {
-        if (limit < 1) throw new IllegalArgumentException("limit must > 0");
+        if (limit < 1) throw new IllegalArgumentException("Param limit must > 0");
         steps.add(new Step<I, R>(this, fn) {
             @Override
             protected boolean needReRun(R r) {
@@ -167,6 +164,10 @@ public class TaskWrapper {
     }
 
 
+    /**
+     * 日志封装
+     * @return {@link Logger}
+     */
     public Logger log() {return TaskWrapper.log;}
 
 
