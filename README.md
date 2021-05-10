@@ -11,7 +11,7 @@ TaskContext(执行上下文/任务调度/执行容器): 一组逻辑相关性的
  * 任务调度
 
 ### 安装教程
-```
+```xml
 <dependency>
     <groupId>cn.xnatural.task</groupId>
     <artifactId>task</artifactId>
@@ -21,7 +21,7 @@ TaskContext(执行上下文/任务调度/执行容器): 一组逻辑相关性的
 
 ### 用法
 #### 创建独立任务
-```
+```java
 TaskWrapper task = new TaskWrapper()
     // 添加执行步骤1
     .step((param, me) -> {
@@ -35,7 +35,7 @@ new TaskWrapper("task1")
 ```
 
 #### 重复执行步骤任务
-```
+```java
 TaskWrapper task = new TaskWrapper()
     // 添加可重复执行步骤
     .reStep(3, (param, me) -> {
@@ -49,7 +49,7 @@ task.start(); // 开始执行
 ```
 
 #### 任务暂停/恢复
-```
+```java
 TaskWrapper task = new TaskWrapper()
     // 添加执行步骤1
     .step((param, me) -> {
@@ -68,7 +68,7 @@ task.resume(); // 恢复执行
 ```
 
 #### 一组相关任务(执行上下文/任务调度/执行容器)
-```
+```java
 TaskContext ctx = new TaskContext(); //创建任务容器
 // 添加task1
 ctx.addTask(new TaskWrapper("task1"));
@@ -89,7 +89,7 @@ ctx.start();
 ```
 
 #### 异步恢复某个任务
-```
+```java
 // 任务task1: 等待条件
 ctx.addTask(new TaskWrapper("task1").step((param, me) -> {
     me.info("执行 step1, 检查属性 xxx: {}", ctx.getAttr("xxx"));
