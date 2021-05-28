@@ -33,13 +33,11 @@ public class Step<I, R> implements BiFunction<I, TaskWrapper, R> {
     /**
      * 是否需要重试
      * @param r 执行结果
-     * @return
      */
     protected boolean needReRun(R r) { return false; }
 
     /**
      * 是否已完成
-     * @return
      */
     public boolean isCompleted() { return end; }
 
@@ -59,28 +57,24 @@ public class Step<I, R> implements BiFunction<I, TaskWrapper, R> {
 
     /**
      * 执行的结果
-     * @return
      */
     public R getResult() { return result; }
 
 
     /**
      * 执行第几次
-     * @return
      */
     public int times() { return times; }
 
 
     /**
      * 当前关联的任务
-     * @return
      */
     public TaskWrapper task() { return this.task; }
 
 
     /**
      * 日志
-     * @return
      */
     public Logger log() { return TaskWrapper.log; }
 

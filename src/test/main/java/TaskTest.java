@@ -19,13 +19,19 @@ public class TaskTest {
                 .reStep(3, (param, me) -> {
                     me.info("执行 重试 step3, 第 {} 次", me.times());
                     return null;
-                }, (param, me) -> {
-                    if (param == null && me.times() < 3) return true;
+                }, (result, me) -> {
+                    if (result == null && me.times() < 3) return true;
                     else return false;
                 });
-        task.start();
+        task.run();
         Thread.sleep(1000L * 5);
         task.resume(); // 恢复执行
+    }
+
+
+    @Test
+    void emptyStepTask() {
+        new TaskWrapper("empty").run();
     }
 
 

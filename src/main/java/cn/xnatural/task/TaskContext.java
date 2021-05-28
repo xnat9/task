@@ -148,7 +148,7 @@ public class TaskContext<T extends TaskWrapper> {
                 if (task == null) break;
                 executingTasks.add(task);
                 // 每个Task开始, 用一个新的执行栈
-                exec(task::start);
+                exec(task::run);
             }
         }
         if (status.get() == Status.Paused) { //暂停所有正在执行的任务
@@ -184,7 +184,6 @@ public class TaskContext<T extends TaskWrapper> {
     /**
      * 添加任务
      * 进入等待执行对列
-     * @param task
      */
     public final TaskContext<T> addTask(final T task) {
         if (status.get() == Status.OkStopped || status.get() == Status.FailStopped) throw new RuntimeException(key + " already stopped. Cannot add task: " + task.key);
@@ -223,7 +222,6 @@ public class TaskContext<T extends TaskWrapper> {
 
     /**
      * 删除一个Task 之后 做的操作
-     * @param task
      */
     protected void postRemoveTask(T task) {}
 
@@ -281,7 +279,6 @@ public class TaskContext<T extends TaskWrapper> {
 
     /**
      * 向当前容器中的 线程池 中 添加任务
-     * @param fn
      */
     public final void exec(final Runnable fn) {
         final Runnable fnn = () -> {
@@ -338,7 +335,6 @@ public class TaskContext<T extends TaskWrapper> {
     /**
      * 设置并发任务大小. 默认10个
      * @param parallelLimit
-     * @return
      */
     public TaskContext<T> setParallelLimit(int parallelLimit) {
         if (parallelLimit < 1) throw new IllegalArgumentException("Param parallelLimit >= 1");

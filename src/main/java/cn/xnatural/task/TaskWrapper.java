@@ -13,7 +13,7 @@ import java.util.function.BiFunction;
 /**
  * {@link Step} 任务包装类: 一组顺序相关性的{@link Step}
  *
- * 启动: {@link #start}, 核心方法 {@link #trigger}
+ * 启动: {@link #run}, 核心方法 {@link #trigger}
  * 任务方法执行顺序: {@link #trigger()}
  * Created by xxb on 18/12/20.
  */
@@ -78,7 +78,7 @@ public class TaskWrapper {
         steps.add(new Step<I, R>(this, fn) {
             @Override
             protected boolean needReRun(R r) {
-                if (times() > limit) throw new RuntimeException("Re run up to limit: " + limit);
+                if (times() > limit) throw new RuntimeException("Step reRun up to limit: " + limit);
                 return isReRun.apply(r, this);
             }
         });
@@ -87,34 +87,43 @@ public class TaskWrapper {
 
 
     /**
-     * Task 启动
+     * 执行任务
+     * @return 任务结果
      */
-    public final void start() {
+    public final Object run() { return run(null); }
+
+
+    /**
+     * 执行任务
+     * @param input 输入
+     * @return 任务结果
+     */
+    public final Object run(Object input) {
         if (Status.OkStopped == status.get() || Status.FailStopped == status.get()) {
-            log.warn(logPrefix() + "already closed"); return;
+            log.warn(logPrefix() + "already closed"); return null;
         }
         if (Status.Running == status.get()) {
-            log.warn(logPrefix() + "already running"); return;
+            log.warn(logPrefix() + "already running"); return null;
         }
         if (Status.Paused == status.get()) {
-            log.warn(logPrefix() + "already paused"); return;
+            log.warn(logPrefix() + "already paused"); return null;
         }
         status.compareAndSet(null, Status.Ready);
         this.startTime = new Date();
         log.debug(logPrefix() + "starting");
         if (steps.isEmpty()) log.warn(logPrefix() + "not found steps");
-        trigger();
+        return trigger(input);
     }
 
 
     /**
      * 触发任务步骤链执行
      * 自旋执行
+     * @param input 入参
      */
-    protected final void trigger() {
-        // if (Status.OkStopped == status.get() || Status.FailStopped == status.get()) return;
-        if (!status.compareAndSet(Status.Ready, Status.Running)) return; // 保证同时只有一个线程执行任务
-        Object result = null;
+    protected final Object trigger(Object input) {
+        if (!status.compareAndSet(Status.Ready, Status.Running)) return null; // 保证同时只有一个线程执行任务
+        Object result = input;
         for (Step step : steps) {
             if (Status.Paused == status.get()) break; // 暂停
             if (step.isCompleted()) { result = step.getResult(); continue; }
@@ -135,12 +144,12 @@ public class TaskWrapper {
             log.info(logPrefix() + "finished. spend: {}ms. status: {}",  System.currentTimeMillis() - startTime.getTime(), status.get());
             if (ctx != null) ctx.removeTask(this);
         }
+        return result;
     }
 
 
     /**
      * 暂停. 任务会执行完当前正在执行的步骤后暂停执行下一个{@link Step}
-     * @return
      */
     public boolean suspend() {
         if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) { return false; }
@@ -153,13 +162,12 @@ public class TaskWrapper {
 
     /**
      * 恢复执行
-     * @return
      */
     public boolean resume() {
         if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) { return false; }
         if (status.get() == Status.Running) return true;
         status.set(Status.Ready);
-        trigger();
+        trigger(null);
         return true;
     }
 
@@ -168,14 +176,14 @@ public class TaskWrapper {
      * 日志封装
      * @return {@link Logger}
      */
-    public Logger log() {return TaskWrapper.log;}
+    public Logger log() { return TaskWrapper.log; }
 
 
     /**
      * 当前任务所在容器
      * @return
      */
-    public TaskContext ctx() {return ctx;}
+    public TaskContext ctx() { return ctx; }
 
 
     /**
