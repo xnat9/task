@@ -77,10 +77,10 @@ ctx.addTask(new TaskWrapper("task1"));
 // 添加task2
 ctx.addTask(new TaskWrapper("task2"));
 // 添加任务3: 在任务中衍生任务task4
-ctx.addTask(new TaskWrapper("task3").step((param, me) -> {
-    me.info("执行");
-    ctx.addTask(new TaskWrapper("task4").step((param, me) -> {
-        me.info("执行衍生任务");
+ctx.addTask(new TaskWrapper("task3").step((param, step) -> {
+    step.info("执行");
+    ctx.addTask(new TaskWrapper("task4").step((param1, step1) -> {
+        step1.info("执行衍生任务");
         return null;
     }));
     return null;
