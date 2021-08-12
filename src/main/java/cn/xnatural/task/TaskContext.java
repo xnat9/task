@@ -83,7 +83,7 @@ public class TaskContext<T extends TaskWrapper> {
     public TaskContext() {
         this.key = "TaskContext[" + Integer.toHexString(hashCode()) + "]";
         executor = Executors.newFixedThreadPool(4, new ThreadFactory() {
-            AtomicInteger i = new AtomicInteger(1);
+            final AtomicInteger i = new AtomicInteger(1);
             @Override
             public Thread newThread(Runnable r) { return new Thread(r, key + "-" + i.getAndIncrement()); }
         });
@@ -132,17 +132,16 @@ public class TaskContext<T extends TaskWrapper> {
     /**
      * 启动前初始化
      */
-    protected void doStart(TaskContext ctx) { }
+    protected void doStart(TaskContext<T> ctx) { }
 
 
     /**
-     * 触发任务执行
-     * 自旋执行
+     * 触发任务执行. 自旋执行
      */
     protected final void trigger() {
         // 触发任务执行. 1. 当前状态为Running; 2. 当前状态为Ready
         if (status.get() == Status.Running || status.compareAndSet(Status.Ready, Status.Running)) {
-            for (T t : executingTasks) { t.resume(); }
+            for (T t : executingTasks) t.resume();
             while (!waitingTasks.isEmpty() && status.get() == Status.Running && executingTasks.size() < parallelLimit) {
                 T task = waitingTasks.poll();
                 if (task == null) break;
@@ -152,22 +151,25 @@ public class TaskContext<T extends TaskWrapper> {
             }
         }
         if (status.get() == Status.Paused) { //暂停所有正在执行的任务
-            for (T t : executingTasks) { t.suspend(); }
+            for (T t : executingTasks) t.suspend();
         }
         if (status.get() == Status.Stopping) { //容器被通知停止, 让正在执行的任务对列执行完成
-            for (T t : executingTasks) { t.resume(); }
+            for (T t : executingTasks) t.resume();
         }
-        if (waitingTasks.isEmpty() && executingTasks.isEmpty() && status.get() != Status.Paused && status.compareAndSet(Status.Running, Status.OkStopped)) { //等待对列和正在执行对列都为空
+        if ( //判断是否已结束: 等待对列和正在执行对列都为空
+                waitingTasks.isEmpty() && executingTasks.isEmpty() &&
+                status.get() != Status.Paused &&
+                status.compareAndSet(Status.Running, Status.OkStopped)
+        ) {
             doStop(this);
         }
     }
 
 
     /**
-     * 结果
-     * @param ctx
+     * 结束执行
      */
-    protected void doStop(TaskContext ctx) {
+    protected void doStop(TaskContext<T> ctx) {
         log.info(key + " -> finished. status: {}, spend: {}ms, success: {}, fail: {}, waiting: {}", status.get(), System.currentTimeMillis() - startTime.getTime(), successCnt, failureCnt, waitingTasks.size());
         executor.shutdown();
     }
@@ -200,14 +202,14 @@ public class TaskContext<T extends TaskWrapper> {
 
     /**
      * 删除一个Task 之前 做的操作
-     * @param task
+     * @param task {@link TaskWrapper}
      */
     protected void preRemoveTask(T task) {}
 
 
     /**
      * 从正在执行对列中 移除
-     * @param task
+     * @param task {@link TaskWrapper}
      */
     protected final void removeTask(final T task) {
         log.trace(key + " -> remove task: {}", task.key);
@@ -293,21 +295,18 @@ public class TaskContext<T extends TaskWrapper> {
 
     /**
      * 任务是否全部成功结束
-     * @return
      */
     public boolean isSuccessEnd() { return isComplete() && failureCnt.longValue() == 0; }
 
 
     /**
      * 任务是否全部完成
-     * @return
      */
     public boolean isComplete() { return isEnd() && waitingTasks.isEmpty() && executingTasks.isEmpty(); }
 
 
     /**
      * 容器是否结束
-     * @return
      */
     public boolean isEnd() { return Status.OkStopped == status.get() || Status.FailStopped == status.get(); }
 
@@ -316,9 +315,9 @@ public class TaskContext<T extends TaskWrapper> {
      * 设置属性
      * @param key 属性key
      * @param value 属性值
-     * @return
+     * @return {@link TaskContext<T>}
      */
-    public TaskContext setAttr(String key, Object value) {
+    public TaskContext<T> setAttr(String key, Object value) {
         this.attrs.put(key, value);
         return this;
     }
@@ -334,7 +333,6 @@ public class TaskContext<T extends TaskWrapper> {
 
     /**
      * 设置并发任务大小. 默认10个
-     * @param parallelLimit
      */
     public TaskContext<T> setParallelLimit(int parallelLimit) {
         if (parallelLimit < 1) throw new IllegalArgumentException("Param parallelLimit >= 1");

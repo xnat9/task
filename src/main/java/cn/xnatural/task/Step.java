@@ -84,9 +84,7 @@ public class Step<I, R> implements BiFunction<I, TaskWrapper, R> {
     }
 
 
-    public void info(String msg, Object...args) {
-        doLog(Level.INFO, msg, args, null);
-    }
+    public void info(String msg, Object...args) { doLog(Level.INFO, msg, args, null); }
 
 
     public void debug(String msg, Object...args) {
@@ -103,12 +101,8 @@ public class Step<I, R> implements BiFunction<I, TaskWrapper, R> {
     }
 
 
-    public void warn(String msg, Object...args) {
-        doLog(Level.WARN, msg, args, null);
-    }
+    public void warn(String msg, Object...args) { doLog(Level.WARN, msg, args, null); }
 
 
-    public void error(Throwable ex, String msg, Object...args) {
-        doLog(Level.ERROR, msg, args, ex);
-    }
+    public void error(Throwable ex, String msg, Object...args) { doLog(Level.ERROR, msg, args, ex); }
 }

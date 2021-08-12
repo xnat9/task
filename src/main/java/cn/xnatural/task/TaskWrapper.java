@@ -14,7 +14,7 @@ import java.util.function.BiFunction;
  * {@link Step} 任务包装类: 一组顺序相关性的{@link Step}
  *
  * 启动: {@link #run}, 核心方法 {@link #trigger}
- * 任务方法执行顺序: {@link #trigger()}
+ * 任务方法执行顺序: {@link #trigger(Object)}
  * Created by xxb on 18/12/20.
  */
 public class TaskWrapper {
@@ -71,7 +71,7 @@ public class TaskWrapper {
      * @param isReRun 判断是否需要重新执行. true: 重试 参数1: fn执行的结果, 参数2: 当前第几次重试
      * @param <I> 入参类型
      * @param <R> 输出结果类型
-     * @return
+     * @return {@link TaskWrapper}
      */
     public <I, R> TaskWrapper reStep(int limit, BiFunction<I, Step, R> fn, BiFunction<R, Step, Boolean> isReRun) {
         if (limit < 1) throw new IllegalArgumentException("Param limit must > 0");
@@ -134,7 +134,7 @@ public class TaskWrapper {
                     if (Status.Paused == status.get()) break;
                 }
             } catch (Exception ex) {
-                log.error("Step error", ex);
+                log.error(logPrefix() + "Step error", ex);
                 status.set(Status.FailStopped);
             }
         }
@@ -152,10 +152,8 @@ public class TaskWrapper {
      * 暂停. 任务会执行完当前正在执行的步骤后暂停执行下一个{@link Step}
      */
     public boolean suspend() {
-        if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) { return false; }
         if (status.get() == Status.Paused) return true;
-        // 正在执行最后一个Step 不能暂停
-        if (status.get() == Status.Running && (steps.stream().filter(step -> step.isCompleted()).count() + 1) == steps.size()) return false;
+        if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) return false;
         return status.compareAndSet(Status.Running, Status.Paused);
     }
 
@@ -164,8 +162,8 @@ public class TaskWrapper {
      * 恢复执行
      */
     public boolean resume() {
-        if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) { return false; }
         if (status.get() == Status.Running) return true;
+        if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) return false;
         status.set(Status.Ready);
         trigger(null);
         return true;
@@ -181,48 +179,42 @@ public class TaskWrapper {
 
     /**
      * 当前任务所在容器
-     * @return
      */
     public TaskContext ctx() { return ctx; }
 
 
     /**
      * 是否成功结束
-     * @return
      */
     boolean isSuccessEnd() { return status.get() == Status.OkStopped; }
 
 
     /**
      * 任务状态
-     * @return
      */
     public String getStatus() { return status.get().name(); }
 
 
     /**
      * 启动时间
-     * @return
      */
     public Date getStartTime() { return startTime; }
 
 
     /**
      * 任务标识key
-     * @return
      */
     public Object getKey() { return key; }
 
 
     /**
      * 日志前缀
-     * @return
      */
     protected String logPrefix() { return (ctx() == null ? "" : ctx().key + ", ") + getKey() + " -> ";}
 
 
     @Override
     public String toString() {
-        return logPrefix() + "[startTime: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(startTime) + ", stepTotal: " + steps.size() + ", completed: " + steps.stream().filter(step -> step.isCompleted()).count() + ", status: " + getStatus() + "]";
+        return logPrefix() + "[startTime: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSS").format(startTime) + ", stepTotal: " + steps.size() + ", completed: " + steps.stream().filter(step -> step.isCompleted()).count() + ", status: " + getStatus() + "]";
     }
 }
