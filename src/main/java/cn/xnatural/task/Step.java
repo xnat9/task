@@ -6,13 +6,14 @@ import org.slf4j.spi.LocationAwareLogger;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * 任务执行单元
  * @param <I> 入参. 一般为上一个{@link Step}的执行结果{@link #result}
  * @param <R> 结果. 一般为下一个{@link Step}的入参{@link I}
  */
-public class Step<I, R> implements BiFunction<I, TaskWrapper, R> {
+public class Step<I, R> implements Function<I, R> {
     // 执行单元
     private final BiFunction<I, Step, R> fn;
     // 当前关联的任务
@@ -43,7 +44,7 @@ public class Step<I, R> implements BiFunction<I, TaskWrapper, R> {
 
 
     @Override
-    public R apply(I i, TaskWrapper me) {
+    public R apply(I i) {
         if (running.compareAndSet(false, true)) {
             times++;
             result = fn.apply(i, this);

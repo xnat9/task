@@ -4,9 +4,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
@@ -37,6 +41,10 @@ public class TaskWrapper {
      * 任务的步骤执行链
      */
     protected final List<Step>                     steps  = new LinkedList<>();
+    /**
+     * 用于并行步骤执行
+     */
+    protected ExecutorService executor;
 
 
     public TaskWrapper(Object key) { if (key == null) throw new NullPointerException("key must not be null"); this.key = key; }
@@ -87,6 +95,35 @@ public class TaskWrapper {
 
 
     /**
+     * 并行多个步骤
+     * @param steps 步骤函数
+     * @param <I> 入参类型
+     * @param <R> 输出结果类型
+     * @return {@link TaskWrapper}
+     */
+    public <I, R> TaskWrapper parallel(BiFunction<I, Step, R>... steps) {
+        this.steps.add(
+                new Step<I, List<R>>(this, (i, me) -> {
+                    final CountDownLatch latch = new CountDownLatch(steps.length);
+                    final List<R> results = new ArrayList<>(steps.length);
+                    for (int j = 0; j < steps.length; j++) {
+                        BiFunction<I, Step, R> step = steps[j];
+                        int finalJ = j;
+                        results.add(null);
+                        exec(() -> {
+                            results.set(finalJ, step.apply(i, me)); // 返回的结果list 和 入参一一对应
+                            latch.countDown();
+                        });
+                    }
+                    try { latch.await(); } catch (InterruptedException e) { throw new RuntimeException(e); }
+                    return results;
+                })
+        );
+        return this;
+    }
+
+
+    /**
      * 执行任务
      * @return 任务结果
      */
@@ -129,7 +166,7 @@ public class TaskWrapper {
             if (step.isCompleted()) { result = step.getResult(); continue; }
             try {
                 while (true) { // 循环执行直到成功
-                    Object r = step.apply(result, this);
+                    Object r = step.apply(result);
                     if (step.isCompleted()) {result = r; break;}
                     if (Status.Paused == status.get()) break;
                 }
@@ -167,6 +204,25 @@ public class TaskWrapper {
         status.set(Status.Ready);
         trigger(null);
         return true;
+    }
+
+
+    public TaskWrapper executor(ExecutorService executor) { this.executor = executor; return this; }
+
+
+    protected void exec(Runnable fn) {
+        if (ctx() != null) {
+            ctx().exec(fn);
+        }
+        else {
+            final Runnable fnn = () -> {
+                try { fn.run(); } catch (Exception ex) {
+                    log.error("", ex);
+                }
+            };
+            if (executor == null || executor.isShutdown()) fnn.run();
+            else executor.execute(fnn);
+        }
     }
 
 

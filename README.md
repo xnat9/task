@@ -111,5 +111,8 @@ ctx.addTask(new TaskWrapper("task2").step((param, me) -> {
 }));
 ```
 
+# 1.0.2 ing...
+- [x] feat: 并行多个步骤
+
 # 参与贡献
 xnatural@msn.cn

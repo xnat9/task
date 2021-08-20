@@ -80,4 +80,21 @@ public class TaskTest {
         }));
         ctx.start();
     }
+
+
+    @Test
+    void testParallel() {
+        Object r = new TaskWrapper("testParallel").parallel(
+                (input, step) -> {
+                    try {
+                        Thread.sleep(1000 * 5);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    return input + " p1";
+                },
+                (input, step) -> input + " p2"
+        ).run("xx");
+        System.out.println("=====" + r);
+    }
 }
