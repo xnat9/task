@@ -13,6 +13,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
+import java.util.function.Predicate;
 
 /**
  * {@link Step} 任务包装类: 一组顺序相关性的{@link Step}
@@ -65,9 +66,44 @@ public class TaskWrapper {
      * @param <R> 输出结果类型. 为下一个{@link Step}的入参
      * @return {@link TaskWrapper}
      */
-    public <I, R> TaskWrapper step(BiFunction<I, Step, R> fn) {
+    public <I, R> TaskWrapper step(BiFunction<I, Step, R> fn) { return step(fn, null); }
+
+
+    /**
+     *
+     * 添加执行步骤
+     * @param fn 执行逻辑函数
+     * @param condition 执行条件
+     * @param <I> 入参类型. 入参为上一个{@link Step}的返回
+     * @param <R> 输出结果类型. 为下一个{@link Step}的入参
+     * @return {@link TaskWrapper}
+     */
+    public <I, R> TaskWrapper step(BiFunction<I, Step, R> fn, Predicate<Step> condition) {
         if (fn == null) throw new IllegalArgumentException("Param fn required");
-        steps.add(new Step<>(this, fn));
+        steps.add(new Step<>(this, fn, condition));
+        return this;
+    }
+
+
+    /**
+     * 可重复执行的步骤
+     * @param limit 执行的次数限制
+     * @param fn 执行逻辑函数
+     * @param isReRun 判断是否需要重新执行. true: 重试 参数1: fn执行的结果, 参数2: 当前第几次重试
+     * @param condition 执行条件
+     * @param <I> 入参类型
+     * @param <R> 输出结果类型
+     * @return {@link TaskWrapper}
+     */
+    public <I, R> TaskWrapper reStep(int limit, BiFunction<I, Step, R> fn, BiFunction<R, Step, Boolean> isReRun, Predicate<Step> condition) {
+        if (limit < 1) throw new IllegalArgumentException("Param limit must > 0");
+        steps.add(new Step<I, R>(this, fn, condition) {
+            @Override
+            protected boolean needReRun(R r) {
+                if (times() > limit) return false;
+                return isReRun.apply(r, this);
+            }
+        });
         return this;
     }
 
@@ -82,26 +118,19 @@ public class TaskWrapper {
      * @return {@link TaskWrapper}
      */
     public <I, R> TaskWrapper reStep(int limit, BiFunction<I, Step, R> fn, BiFunction<R, Step, Boolean> isReRun) {
-        if (limit < 1) throw new IllegalArgumentException("Param limit must > 0");
-        steps.add(new Step<I, R>(this, fn) {
-            @Override
-            protected boolean needReRun(R r) {
-                if (times() > limit) throw new RuntimeException("Step reRun up to limit: " + limit);
-                return isReRun.apply(r, this);
-            }
-        });
-        return this;
+        return reStep(limit, fn, isReRun, null);
     }
 
 
     /**
      * 并行多个步骤
+     * @param condition 执行条件
      * @param steps 步骤函数
      * @param <I> 入参类型
      * @param <R> 输出结果类型
      * @return {@link TaskWrapper}
      */
-    public <I, R> TaskWrapper parallel(BiFunction<I, Step, R>... steps) {
+    public <I, R> TaskWrapper parallel(Predicate<Step> condition, BiFunction<I, Step, R>... steps) {
         this.steps.add(
                 new Step<I, List<R>>(this, (i, me) -> {
                     final CountDownLatch latch = new CountDownLatch(steps.length);
@@ -117,11 +146,20 @@ public class TaskWrapper {
                     }
                     try { latch.await(); } catch (InterruptedException e) { throw new RuntimeException(e); }
                     return results;
-                })
+                }, condition)
         );
         return this;
     }
 
+
+    /**
+     * 并行多个步骤
+     * @param steps 步骤函数
+     * @param <I> 入参类型
+     * @param <R> 输出结果类型
+     * @return {@link TaskWrapper}
+     */
+    public <I, R> TaskWrapper parallel(BiFunction<I, Step, R>... steps) { return parallel(null, steps); }
 
     /**
      * 执行任务
@@ -164,6 +202,13 @@ public class TaskWrapper {
         for (Step step : steps) {
             if (Status.Paused == status.get()) break; // 暂停
             if (step.isCompleted()) { result = step.getResult(); continue; }
+            if (step.condition != null) {
+                synchronized (this) {
+                    if (!step.condition.test(step)) { // 不满足执行条件, 暂停等待恢复执行
+                        status.set(Status.Paused); break;
+                    }
+                }
+            }
             try {
                 while (true) { // 循环执行直到成功
                     Object r = step.apply(result);
@@ -176,7 +221,7 @@ public class TaskWrapper {
             }
         }
         // 全部完成则结束任务
-        if (steps.stream().filter(Step::isCompleted).count() == steps.size()) status.set(Status.OkStopped);
+        if (Status.FailStopped != status.get() && steps.stream().filter(Step::isCompleted).count() == steps.size()) status.set(Status.OkStopped);
         if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) {
             log.info(logPrefix() + "finished. spend: {}ms. status: {}",  System.currentTimeMillis() - startTime.getTime(), status.get());
             if (ctx != null) ctx.removeTask(this);
@@ -198,18 +243,29 @@ public class TaskWrapper {
     /**
      * 恢复执行
      */
-    public boolean resume() {
+    public synchronized boolean resume() {
         if (status.get() == Status.Running) return true;
         if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) return false;
-        status.set(Status.Ready);
-        trigger(null);
-        return true;
+        if (status.compareAndSet(Status.Paused, Status.Ready)) {
+            exec(() -> trigger(null)); return true;
+        }
+        return false;
     }
 
 
+    /**
+     * 设置任务独立执行线程池
+     * 一般用于任务独立运行 并且 有 并行步骤时
+     * @param executor 线程池
+     * @return {@link TaskWrapper}
+     */
     public TaskWrapper executor(ExecutorService executor) { this.executor = executor; return this; }
 
 
+    /**
+     * 任务执行步骤函数
+     * @param fn 执行函数
+     */
     protected void exec(Runnable fn) {
         if (ctx() != null) {
             ctx().exec(fn);

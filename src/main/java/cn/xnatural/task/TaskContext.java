@@ -63,32 +63,26 @@ public class TaskContext<T extends TaskWrapper> {
     /**
      * 属性集
      */
-    protected final Map<String, Object>      attrs;
+    protected final Map<String, Object>      attrs          = new ConcurrentHashMap<>(7);
 
 
     /**
      * 创建集任务管理
      * @param key 集任务key
-     * @param attrs 属性集
      * @param executor 执行器
      */
-    public TaskContext(String key, Map<String, Object> attrs, ExecutorService executor) {
-        if (key == null || key.isEmpty()) throw new IllegalArgumentException("Param key not empty");
-        if (attrs == null) throw new IllegalArgumentException("Param attrs required");
-        if (executor == null) throw new IllegalArgumentException("Param executor required");
-        this.key = key;
-        this.executor = executor;
-        this.attrs = attrs;
-    }
-    public TaskContext() {
-        this.key = "TaskContext[" + Integer.toHexString(hashCode()) + "]";
-        executor = Executors.newFixedThreadPool(4, new ThreadFactory() {
+    public TaskContext(String key, ExecutorService executor) {
+        if (key == null || key.isEmpty()) {
+            this.key = "TaskContext[" + Integer.toHexString(hashCode()) + "]";
+        }
+        this.executor = executor == null ? Executors.newFixedThreadPool(4, new ThreadFactory() {
             final AtomicInteger i = new AtomicInteger(1);
             @Override
-            public Thread newThread(Runnable r) { return new Thread(r, key + "-" + i.getAndIncrement()); }
-        });
-        this.attrs = new ConcurrentHashMap<>();
+            public Thread newThread(Runnable r) { return new Thread(r, TaskContext.this.key + "-" + i.getAndIncrement()); }
+        }) : executor;
     }
+    public TaskContext(String key) { this(key, null); }
+    public TaskContext() { this(null, null); }
 
 
     /**
@@ -141,7 +135,6 @@ public class TaskContext<T extends TaskWrapper> {
     protected final void trigger() {
         // 触发任务执行. 1. 当前状态为Running; 2. 当前状态为Ready
         if (status.get() == Status.Running || status.compareAndSet(Status.Ready, Status.Running)) {
-            for (T t : executingTasks) t.resume();
             while (!waitingTasks.isEmpty() && status.get() == Status.Running && executingTasks.size() < parallelLimit) {
                 T task = waitingTasks.poll();
                 if (task == null) break;
@@ -150,16 +143,21 @@ public class TaskContext<T extends TaskWrapper> {
                 exec(task::run);
             }
         }
-        if (status.get() == Status.Paused) { //暂停所有正在执行的任务
+        // 暂停所有正在执行的任务
+        if (status.get() == Status.Paused) {
             for (T t : executingTasks) t.suspend();
         }
-        if (status.get() == Status.Stopping) { //容器被通知停止, 让正在执行的任务对列执行完成
+        // 执行队列全都是暂停任务, 尝试恢复所有执行
+        else if (executingTasks.stream().allMatch(t -> t.status.get() == TaskWrapper.Status.Paused)) {
             for (T t : executingTasks) t.resume();
         }
-        if ( //判断是否已结束: 等待对列和正在执行对列都为空
-                waitingTasks.isEmpty() && executingTasks.isEmpty() &&
-                status.get() != Status.Paused &&
-                status.compareAndSet(Status.Running, Status.OkStopped)
+        // 判断是否已结束
+        if (
+                status.get() != Status.Paused && executingTasks.isEmpty() &&
+                (
+                    (status.get() == Status.Running && waitingTasks.isEmpty() && status.compareAndSet(Status.Running, failureCnt.longValue() > 0 ? Status.FailStopped : Status.OkStopped)) ||
+                    (status.get() == Status.Stopping && status.compareAndSet(Status.Stopping, failureCnt.longValue() > 0 ? Status.FailStopped : Status.OkStopped))
+                )
         ) {
             doStop(this);
         }
@@ -170,14 +168,14 @@ public class TaskContext<T extends TaskWrapper> {
      * 结束执行
      */
     protected void doStop(TaskContext<T> ctx) {
-        log.info(key + " -> finished. status: {}, spend: {}ms, success: {}, fail: {}, waiting: {}", status.get(), System.currentTimeMillis() - startTime.getTime(), successCnt, failureCnt, waitingTasks.size());
+        log.info(key + " -> finished({}). spend: {}ms, successCnt: {}, failureCnt: {}, waiting: {}", status.get(), System.currentTimeMillis() - startTime.getTime(), successCnt, failureCnt, waitingTasks.size());
         executor.shutdown();
     }
 
 
     /**
      * 添加任务前执行
-     * @param task {@link T}
+     * @param task {@link TaskWrapper}
      * @return true: 添加, false: 不添加
      */
     protected boolean preAddTask(final T task) { return true; }
@@ -193,8 +191,9 @@ public class TaskContext<T extends TaskWrapper> {
             log.warn(key + " -> add task is null"); return this;
         }
         if (!preAddTask(task)) return this;
-        waitingTasks.offer(task);
         task.ctx = this;
+        waitingTasks.offer(task);
+        log.debug("{} -> added task: {}", key, task.key);
         trigger();
         return this;
     }
@@ -233,8 +232,13 @@ public class TaskContext<T extends TaskWrapper> {
      */
     public boolean stop() {
         if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) return false;
-        if (status.get() == Status.Stopping) return true;
+        if (status.get() == Status.Stopping) {
+            trigger();
+            log.info(key + " -> stopping({}). spend: {}ms, successCnt: {}, failureCnt: {}, waiting: {}, executing: {}", status.get(), System.currentTimeMillis() - startTime.getTime(), successCnt, failureCnt, waitingTasks.size(), executingTasks);
+            return true;
+        }
         boolean f = status.compareAndSet(Status.Running, Status.Stopping) || status.compareAndSet(Status.Paused, Status.Stopping);
+        log.info(key + " -> stopping: {}, status:{}", f, status.get());
         trigger();
         return f;
     }
@@ -244,10 +248,10 @@ public class TaskContext<T extends TaskWrapper> {
      * 暂停
      */
     public boolean suspend() {
-        if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) { return false; }
+        if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) return false;
         if (status.get() == Status.Paused) return true;
         boolean f = status.compareAndSet(Status.Running, Status.Paused);
-        log.info(key + " -> suspend");
+        log.info(key + " -> suspend: {}, status:{}", f, status.get());
         trigger();
         return f;
     }
@@ -257,10 +261,10 @@ public class TaskContext<T extends TaskWrapper> {
      * 恢复,继续执行
      */
     public boolean resume() {
-        if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) { return false; }
+        if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) return false;
         if (status.get() == Status.Running) return true;
         boolean f = status.compareAndSet(Status.Paused, Status.Ready);
-        log.info(key + " -> resume");
+        log.info(key + " -> resume: {}, status:{}", f, status.get());
         trigger();
         return f;
     }

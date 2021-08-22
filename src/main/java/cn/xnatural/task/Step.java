@@ -6,16 +6,18 @@ import org.slf4j.spi.LocationAwareLogger;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
-import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * 任务执行单元
  * @param <I> 入参. 一般为上一个{@link Step}的执行结果{@link #result}
  * @param <R> 结果. 一般为下一个{@link Step}的入参{@link I}
  */
-public class Step<I, R> implements Function<I, R> {
+public class Step<I, R> {
     // 执行单元
     private final BiFunction<I, Step, R> fn;
+    // 执行条件
+    protected final Predicate<Step> condition;
     // 当前关联的任务
     private final TaskWrapper            task;
     // 是否正在执行
@@ -26,9 +28,14 @@ public class Step<I, R> implements Function<I, R> {
     protected     boolean                end;
     // 执行第几次
     private int                          times;
+    // 第几个步骤
+    public final int num;
 
 
-    public Step(TaskWrapper task, BiFunction<I, Step, R> fn) { this.task = task; this.fn = fn; }
+    public Step(TaskWrapper task, BiFunction<I, Step, R> fn, Predicate<Step> condition) {
+        this.task = task; this.fn = fn; this.condition = condition;
+        this.num = task == null ? -1 : task.steps.size() + 1;
+    }
 
 
     /**
@@ -43,11 +50,16 @@ public class Step<I, R> implements Function<I, R> {
     public boolean isCompleted() { return end; }
 
 
-    @Override
-    public R apply(I i) {
+    /**
+     * 执行步骤
+     * @param input 入参
+     * @return 结果
+     */
+    protected R apply(I input) {
+        if (end) return result;
         if (running.compareAndSet(false, true)) {
             times++;
-            result = fn.apply(i, this);
+            result = fn.apply(input, this);
             if (needReRun(result)) result = null;
             else end = true;
             running.set(false);
