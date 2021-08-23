@@ -19,15 +19,15 @@ public class Step<I, R> {
     // 执行条件
     protected final Predicate<Step> condition;
     // 当前关联的任务
-    private final TaskWrapper            task;
+    private final TaskWrapper task;
     // 是否正在执行
-    private final AtomicBoolean          running = new AtomicBoolean(false);
+    private final AtomicBoolean running = new AtomicBoolean(false);
     // 执行结果
-    private       R                      result;
+    private R result;
     // 是否执行结束
-    protected     boolean                end;
+    protected boolean end;
     // 执行第几次
-    private int                          times;
+    private int times;
     // 第几个步骤
     public final int num;
 
@@ -43,6 +43,7 @@ public class Step<I, R> {
      * @param r 执行结果
      */
     protected boolean needReRun(R r) { return false; }
+
 
     /**
      * 是否已完成
@@ -83,7 +84,13 @@ public class Step<I, R> {
     /**
      * 当前关联的任务
      */
-    public TaskWrapper task() { return this.task; }
+    public TaskWrapper task() { return task; }
+
+
+    /**
+     * 当前关联的任务容器
+     */
+    public TaskContext ctx() { return task == null ? null : task.ctx(); }
 
 
     /**
