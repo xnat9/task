@@ -94,25 +94,19 @@ public class TaskContext<T extends TaskWrapper> {
     /**
      * TaskContext 容器启动
      */
-    public final void start() {
-        if (Status.OkStopped == status.get() || Status.FailStopped == status.get()) {
-            log.warn(key + " -> already closed"); return;
+    public final TaskContext<T> start() {
+        if (status.get() != null) {
+            log.warn(key + " -> already " + status.get()); return this;
         }
-        if (Status.Running == status.get()) {
-            log.warn(key + " -> already running"); return;
-        }
-        if (Status.Paused == status.get()) {
-            log.warn(key + " -> already paused"); return;
-        }
-        status.compareAndSet(null, Status.Ready);
-        this.startTime = new Date();
+        if (!status.compareAndSet(null, Status.Ready)) return this; // 保证只一个线程执行过start
+        startTime = new Date();
         log.info(key + " -> starting");
         try {
             doStart(this);
             if (waitingTasks.isEmpty()) {
                 log.warn(key + " -> not found task");
                 status.set(Status.OkStopped);
-                doStop(this); return;
+                doStop(this); return this;
             }
             trigger();
         } catch (Exception t) {
@@ -120,6 +114,7 @@ public class TaskContext<T extends TaskWrapper> {
             status.set(Status.FailStopped);
             doStop(this);
         }
+        return this;
     }
 
 
@@ -139,16 +134,15 @@ public class TaskContext<T extends TaskWrapper> {
                 T task = waitingTasks.poll();
                 if (task == null) break;
                 executingTasks.add(task);
-                // 每个Task开始, 用一个新的执行栈
-                exec(task::run);
+                exec(task::run); // 每个Task开始, 用一个新的执行栈
             }
         }
         // 暂停所有正在执行的任务
         if (status.get() == Status.Paused) {
             for (T t : executingTasks) t.suspend();
         }
-        // 执行队列全都是暂停任务, 尝试恢复所有执行
-        else if (executingTasks.stream().allMatch(t -> t.status.get() == TaskWrapper.Status.Paused)) {
+        // 主动停止时, 执行队列全都是暂停任务, 则尝试恢复所有执行
+        if (status.get() == Status.Stopping && executingTasks.stream().allMatch(t -> t.status.get() == TaskWrapper.Status.Paused)) {
             for (T t : executingTasks) t.resume();
         }
         // 判断是否已结束
@@ -347,6 +341,6 @@ public class TaskContext<T extends TaskWrapper> {
 
     @Override
     public String toString() {
-        return key + " -> [success: " + successCnt + ", failure: " + failureCnt + " , spend: " + (System.currentTimeMillis() - startTime.getTime()) + "ms, waiting: " + waitingTasks.size() + ", executing: " + executingTasks.size() + "]";
+        return key + " -> [successCnt: " + successCnt + ", failureCnt: " + failureCnt + " , spend: " + (System.currentTimeMillis() - startTime.getTime()) + "ms, waiting: " + waitingTasks.size() + ", executing: " + executingTasks.size() + "]";
     }
 }
