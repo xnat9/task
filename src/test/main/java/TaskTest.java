@@ -59,16 +59,33 @@ public class TaskTest {
 
 
     @Test
+    void testTaskParallel() {
+        Object r = new TaskWrapper("testParallel").parallel(
+                (input, step) -> {
+                    try {
+                        Thread.sleep(1000 * 5);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    return input + " p1";
+                },
+                (input, step) -> input + " p2"
+        ).run("xx");
+        System.out.println("=====" + r);
+    }
+
+
+    @Test
     void testContext() throws Exception {
         new TaskContext()
             // 任务task1: 等待条件
             .addTask(new TaskWrapper("task1").step((param, step) -> {
-                step.info("执行 step{}, 检查属性 xxx: {}", step.num, step.task().ctx().getAttr("xxx"));
+                step.info("执行 step{}, 检查属性 xxx: {}", step.num, step.ctx().getAttr("xxx"));
                 return null;
             }).step((param, step) -> {
-                step.info("执行 step{}, 检查属性 xxx: {}", step.num, step.task().ctx().getAttr("xxx"));
+                step.info("执行 step{}, 检查属性 xxx: {}", step.num, step.ctx().getAttr("xxx"));
                 return null;
-            }, step -> step.task().ctx().getAttr("xxx") != null)) //当前步骤执行条件
+            }, step -> step.ctx().getAttr("xxx") != null)) //当前步骤执行条件
 
             // 任务task2: 设置条件,然后恢复task1
             .addTask(new TaskWrapper("task2").step((param, step) -> {
@@ -78,8 +95,8 @@ public class TaskTest {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-                step.task().ctx().setAttr("xxx", "ooo");
-                step.task().ctx().resumeTask("task1"); // 设置属性xxx, 然后恢复task1继续执行
+                step.ctx().setAttr("xxx", "ooo");
+                step.ctx().resumeTask("task1"); // 设置属性xxx, 然后恢复task1继续执行
                 return null;
             }))
             .start();
@@ -97,29 +114,12 @@ public class TaskTest {
             // 添加任务3: 在任务中衍生任务task4
             .addTask(new TaskWrapper("task3").step((param, step) -> {
                 step.info("执行");
-                step.task().ctx().addTask(new TaskWrapper("task4").step((param1, step1) -> {
+                step.ctx().addTask(new TaskWrapper("task4").step((param1, step1) -> {
                     step1.info("执行衍生任务");
                     return null;
                 }));
                 return null;
             }))
             .start();
-    }
-
-
-    @Test
-    void testParallel() {
-        Object r = new TaskWrapper("testParallel").parallel(
-                (input, step) -> {
-                    try {
-                        Thread.sleep(1000 * 5);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                    return input + " p1";
-                },
-                (input, step) -> input + " p2"
-        ).run("xx");
-        System.out.println("=====" + r);
     }
 }

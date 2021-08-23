@@ -199,21 +199,21 @@ public class TaskWrapper {
     protected final Object trigger(Object input) {
         if (!status.compareAndSet(Status.Ready, Status.Running)) return null; // 保证同时只有一个线程执行任务
         Object result = input;
-        for (Step step : steps) {
+        out: for (Step step : steps) {
             if (Status.Paused == status.get()) break; // 暂停
             if (step.isCompleted()) { result = step.getResult(); continue; }
-            if (step.condition != null) {
-                synchronized (this) {
-                    if (!step.condition.test(step)) { // 不满足执行条件, 暂停等待恢复执行
-                        status.set(Status.Paused); break;
-                    }
-                }
-            }
             try {
                 while (true) { // 循环执行直到成功
+                    if (step.condition != null) {
+                        synchronized (this) {
+                            if (!step.condition.test(step)) { // 不满足执行条件, 暂停等待恢复执行
+                                status.set(Status.Paused); break out;
+                            }
+                        }
+                    }
+                    if (Status.Paused == status.get()) break out;
                     Object r = step.apply(result);
                     if (step.isCompleted()) {result = r; break;}
-                    if (Status.Paused == status.get()) break;
                 }
             } catch (Exception ex) {
                 log.error(logPrefix() + "Step error", ex);
@@ -221,9 +221,9 @@ public class TaskWrapper {
             }
         }
         // 全部完成则结束任务
-        if (Status.FailStopped != status.get() && steps.stream().filter(Step::isCompleted).count() == steps.size()) status.set(Status.OkStopped);
+        if (Status.FailStopped != status.get() && steps.stream().allMatch(Step::isCompleted)) status.set(Status.OkStopped);
         if (Status.FailStopped == status.get() || Status.OkStopped == status.get()) {
-            log.info(logPrefix() + "finished. spend: {}ms. status: {}",  System.currentTimeMillis() - startTime.getTime(), status.get());
+            log.info(logPrefix() + "finished({}). spend: {}ms", status.get(), System.currentTimeMillis() - startTime.getTime());
             if (ctx != null) ctx.removeTask(this);
         }
         return result;
