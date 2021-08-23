@@ -70,7 +70,7 @@ Object result = new TaskWrapper()
 ```
 
 ## 任务暂停/恢复
-### 主动模式
+### 主动暂停
 ```java
 TaskWrapper task = new TaskWrapper()
     // 添加执行步骤1
@@ -89,7 +89,7 @@ Thread.sleep(1000L * 5);
 task.resume(); // 恢复执行
 ```
 
-### 条件模式
+### 条件步骤
 ```java
 AtomicInteger var = new AtomicInteger();
 TaskWrapper task = new TaskWrapper()
@@ -102,7 +102,7 @@ TaskWrapper task = new TaskWrapper()
     .step((param, step) -> {
         step.info("执行 step{} ... ", step.num);
         return "xxx";
-    }, step -> var.get() > 0); // 当前执行条件判断函数
+    }, step -> var.get() > 0); // 当前步骤执行的条件判断函数
 task.run(); // 开始执行
 Thread.sleep(1000L * 5);
 var.incrementAndGet();
@@ -110,53 +110,53 @@ task.resume(); // 恢复执行
 Thread.sleep(1000L * 5);
 ```
 
-# 任务容器用法
+# 任务容器
 > 一个大任务被拆分为多个小任务时
 
 > 一组相关任务(执行上下文/任务调度/执行容器), 可编排复杂任务执行顺序规则
 
 > 可控制任务并发数
 
-> 当容器中两个队列(正在执行队列,等待执行队列)都为空时,容器自动结束
+> 当容器中两个队列(正在执行队列,等待执行队列)都为空并且是非暂停状态时, 容器自动结束
 
 ## 创建简单任务容器
 ```java
 new TaskContext("ctx1") //创建任务容器
-    // 添加task1
+    // 添加任务1
     .addTask(new TaskWrapper("task1"))
-    // 添加task2
+    // 添加任务2
     .addTask(new TaskWrapper("task2"))
-    // 添加任务3: 在任务中衍生任务task4
+    // 添加任务3: 在任务中衍生任务任务4
     .addTask(new TaskWrapper("task3").step((param, step) -> {
         step.info("执行 step{}", step.num);
         return null;
     }).step((input, step) -> {
-        ctx.addTask(new TaskWrapper("task4").step((input1, step1) -> {
+        // 任务中继续添加任务到当前任务容器
+        step.ctx().addTask(new TaskWrapper("task4").step((input1, step1) -> {
             step1.info("执行衍生任务");
             return null;
         }));
     }))
     .start();
-// ctx.suspend(); //暂停
-// ctx.resume(); //恢复
 ```
 
 ## 异步恢复某个任务
 ```java
 new TaskContext("ctx2")
-    // 任务task1: 等待条件
+    // 任务1: 等待条件
     .addTask(new TaskWrapper("task1").step((param, step) -> {
-        step.info("执行 step1, 检查属性 xxx: {}", step.task().ctx().getAttr("xxx"));
+        step.info("执行 step1, 检查属性 xxx: {}", step.ctx().getAttr("xxx"));
         return null;
     }).step((param, step) -> {
-        step.info("执行 step2, 检查属性 xxx: {}", step.task().ctx().getAttr("xxx"));
+        step.info("执行 step2, 检查属性 xxx: {}", step.ctx().getAttr("xxx"));
         return null;
-    }, step -> step.task().ctx().getAttr("xxx") != null)) //当前步骤执行条件
-    // 任务task2: 设置条件,然后恢复task1
+    }, step -> step.ctx().getAttr("xxx") != null)) //当前步骤执行条件
+    
+    // 任务2: 设置条件,然后恢复task1
     .addTask(new TaskWrapper("task2").step((param, step) -> {
         step.info("设置属性 xxx:ooo");
-        step.task().ctx().setAttr("xxx", "ooo");
-        step.task().ctx().resumeTask("task1"); // 设置属性xxx, 然后恢复task1继续执行
+        step.ctx().setAttr("xxx", "ooo");
+        step.ctx().resumeTask("task1"); // 设置属性xxx, 然后恢复task1继续执行
         return null;
     }))
     .start();
