@@ -16,7 +16,7 @@
 <dependency>
     <groupId>cn.xnatural.task</groupId>
     <artifactId>task</artifactId>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
@@ -163,10 +163,7 @@ new TaskContext("ctx2")
 ```
 
 
-# 1.0.2 ing...
-- [x] feat: 步骤并行多个函数
-- [x] feat: 任务暂停条件
-- [x] feat: 步骤次序(在任务中排第几个)
+# 1.0.3 ing...
 
 # 参与贡献
 xnatural@msn.cn
